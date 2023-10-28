@@ -1,34 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final goalsList = prefs.getStringList('goals') ?? [];
+  final goals =
+      goalsList.map((goalJson) => Goal.fromJson(jsonDecode(goalJson))).toList();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => GoalsProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (context) => GoalsProvider(goals: goals),
+        ),
+        // Add other providers here
+      ],
       child: MyApp(),
     ),
   );
 }
 
 class GoalsProvider extends ChangeNotifier {
-  List<Goal> _goals = [];
+  List<Goal> _goals;
+
+  GoalsProvider({required List<Goal> goals}) : _goals = goals;
 
   List<Goal> get goals => _goals;
 
-  void addGoal(Goal goal) {
+  void addGoal(Goal goal) async {
     _goals.add(goal);
     notifyListeners();
+    await _saveGoals();
   }
 
-  void editGoal(int index, Goal updatedGoal) {
+  void editGoal(int index, Goal updatedGoal) async {
     _goals[index] = updatedGoal;
     notifyListeners();
+    await _saveGoals();
   }
 
-  void deleteGoal(int index) {
+  void deleteGoal(int index) async {
     _goals.removeAt(index);
     notifyListeners();
+    await _saveGoals();
+  }
+
+  Future<void> _saveGoals() async {
+    final prefs = await SharedPreferences.getInstance();
+    final goalsList = _goals.map((goal) => jsonEncode(goal.toJson())).toList();
+    await prefs.setStringList('goals', goalsList);
   }
 }
 
@@ -43,6 +67,23 @@ class Goal {
       required this.description,
       this.isCompleted = false,
       this.completionTime});
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'description': description,
+      'isCompleted': isCompleted,
+      'completionTime': completionTime?.millisecondsSinceEpoch,
+    };
+  }
+
+  Goal.fromJson(Map<String, dynamic> json)
+      : title = json['title'],
+        description = json['description'],
+        isCompleted = json['isCompleted'],
+        completionTime = json['completionTime'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(json['completionTime'])
+            : null;
 }
 
 class MyApp extends StatelessWidget {
